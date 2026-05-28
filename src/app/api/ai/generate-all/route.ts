@@ -54,18 +54,6 @@ function formatCvForPrompt(cv: ParsedCvContent): string {
   return lines.join('\n');
 }
 
-function calculateMatch(techStack: string[], cv: ParsedCvContent) {
-  if (techStack.length === 0) return { level: 'Medio' as const, percentage: 50 };
-  const cvText = [
-    ...(cv.skills?.technical ?? []),
-    ...(cv.experience?.flatMap((e) => [...(e.responsibilities ?? []), ...(e.achievements ?? [])]) ?? []),
-  ].join(' ').toLowerCase();
-  const matched = techStack.filter((t) => cvText.includes(t.toLowerCase())).length;
-  const percentage = Math.round((matched / techStack.length) * 100);
-  const level = percentage >= 60 ? 'Alto' : percentage >= 30 ? 'Medio' : 'Bajo';
-  return { level: level as 'Alto' | 'Medio' | 'Bajo', percentage };
-}
-
 function buildCvPrompt(job: ExtractedJob, cv: ParsedCvContent, options: Options): string {
   const lang = options.language;
   const tone = toneLabel(options.tone, lang);
@@ -263,7 +251,7 @@ async function generateMatchAnalysis(cv: ParsedCvContent, job: ExtractedJob, lan
     const prompt = `Eres un experto en reclutamiento tech con 15 años de experiencia evaluando candidatos.
 
 CV del candidato:
-${JSON.stringify(cv, null, 2)}
+${formatCvForPrompt(cv)}
 
 Oferta de trabajo:
 - Cargo: ${job.position}
@@ -306,15 +294,16 @@ Reglas:
 
     const message = await client.messages.create({
       model: AI_MODEL,
-      max_tokens: 2000,
+      max_tokens: 3000,
       system: 'Responde SOLO con JSON válido, sin markdown, sin bloques de código, sin texto antes ni después.',
       messages: [{ role: 'user', content: prompt }],
     });
     const text = message.content.find((b) => b.type === 'text')?.text ?? '';
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     return JSON.parse(jsonMatch ? jsonMatch[0] : text) as MatchAnalysis;
-  } catch {
-    return null;
+  } catch (error) {
+    console.error('Match analysis error:', error) // ← agregar esto
+    return null
   }
 }
 
